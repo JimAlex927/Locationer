@@ -145,22 +145,16 @@ public class HistoryActivity extends BaseActivity {
                 String Longitude = cursor.getString(2);
                 String Latitude = cursor.getString(3);
                 long TimeStamp = cursor.getInt(4);
-                String BD09Longitude = cursor.getString(5);
-                String BD09Latitude = cursor.getString(6);
-                Log.d("TB", ID + "\t" + Location + "\t" + Longitude + "\t" + Latitude + "\t" + TimeStamp + "\t" + BD09Longitude + "\t" + BD09Latitude);
+                Log.d("TB", ID + "\t" + Location + "\t" + Longitude + "\t" + Latitude + "\t" + TimeStamp);
                 BigDecimal bigDecimalLongitude = BigDecimal.valueOf(Double.parseDouble(Longitude));
                 BigDecimal bigDecimalLatitude = BigDecimal.valueOf(Double.parseDouble(Latitude));
-                BigDecimal bigDecimalBDLongitude = BigDecimal.valueOf(Double.parseDouble(BD09Longitude));
-                BigDecimal bigDecimalBDLatitude = BigDecimal.valueOf(Double.parseDouble(BD09Latitude));
                 double doubleLongitude = bigDecimalLongitude.setScale(11, RoundingMode.HALF_UP).doubleValue();
                 double doubleLatitude = bigDecimalLatitude.setScale(11, RoundingMode.HALF_UP).doubleValue();
-                double doubleBDLongitude = bigDecimalBDLongitude.setScale(11, RoundingMode.HALF_UP).doubleValue();
-                double doubleBDLatitude = bigDecimalBDLatitude.setScale(11, RoundingMode.HALF_UP).doubleValue();
                 item.put(KEY_ID, Integer.toString(ID));
                 item.put(KEY_LOCATION, Location);
                 item.put(KEY_TIME, GoUtils.timeStamp2Date(Long.toString(TimeStamp)));
                 item.put(KEY_LNG_LAT_WGS, "[经度:" + doubleLongitude + " 纬度:" + doubleLatitude + "]");
-                item.put(KEY_LNG_LAT_CUSTOM, "[经度:" + doubleBDLongitude + " 纬度:" + doubleBDLatitude + "]");
+                item.put(KEY_LNG_LAT_CUSTOM, "[经度:" + doubleLongitude + " 纬度:" + doubleLatitude + "]");
                 data.add(item);
             }
             cursor.close();
@@ -319,24 +313,24 @@ public class HistoryActivity extends BaseActivity {
         mSearchLayout = findViewById(R.id.search_linear);
         mRecordListView = findViewById(R.id.record_list_view);
         mRecordListView.setOnItemClickListener((adapterView, view, i, l) -> {
-            String bd09Longitude;
-            String bd09Latitude;
+            String longitude;
+            String latitude;
             String name;
             name = (String) ((TextView) view.findViewById(R.id.LocationText)).getText();
-            String bd09LatLng = (String) ((TextView) view.findViewById(R.id.BDLatLngText)).getText();
-            bd09LatLng = bd09LatLng.substring(bd09LatLng.indexOf('[') + 1, bd09LatLng.indexOf(']'));
-            String[] latLngStr = bd09LatLng.split(" ");
-            bd09Longitude = latLngStr[0].substring(latLngStr[0].indexOf(':') + 1);
-            bd09Latitude = latLngStr[1].substring(latLngStr[1].indexOf(':') + 1);
+            String wgsLatLng = (String) ((TextView) view.findViewById(R.id.WGSLatLngText)).getText();
+            wgsLatLng = wgsLatLng.substring(wgsLatLng.indexOf('[') + 1, wgsLatLng.indexOf(']'));
+            String[] latLngStr = wgsLatLng.split(" ");
+            longitude = latLngStr[0].substring(latLngStr[0].indexOf(':') + 1);
+            latitude = latLngStr[1].substring(latLngStr[1].indexOf(':') + 1);
 
             // Random offset
             if(sharedPreferences.getBoolean("setting_random_offset", false)) {
-                String[] offsetResult = randomOffset(bd09Longitude, bd09Latitude);
-                bd09Longitude = offsetResult[0];
-                bd09Latitude = offsetResult[1];
+                String[] offsetResult = randomOffset(longitude, latitude);
+                longitude = offsetResult[0];
+                latitude = offsetResult[1];
             }
 
-            if (!MainActivity.showLocation(name, bd09Longitude, bd09Latitude)) {
+            if (!MainActivity.showLocation(name, longitude, latitude)) {
                 GoUtils.DisplayToast(this, getResources().getString(R.string.history_error_location));
             }
             this.finish();

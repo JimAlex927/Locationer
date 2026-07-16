@@ -42,11 +42,10 @@
         android:layout_width="match_parent"
         android:layout_height="450dp">
 
-        <com.baidu.mapapi.map.MapView
+        <org.maplibre.android.maps.MapView
             android:id="@+id/map_joystick"
             android:layout_width="match_parent"
-            android:layout_height="match_parent">
-        </com.baidu.mapapi.map.MapView>
+            android:layout_height="match_parent" />
 
         <ImageButton
             android:id="@+id/btnBack"
@@ -75,6 +74,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#ddffffff"
+            android:orientation="vertical"
             android:visibility="gone">
             <ListView
                 android:id="@+id/map_search_list_view"
@@ -82,6 +82,13 @@
                 android:layout_margin="10dp"
                 android:layout_height="wrap_content">
             </ListView>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="2dp"
+                android:text="@string/osm_search_attribution"
+                android:textSize="10sp" />
         </LinearLayout>
 
     </FrameLayout>

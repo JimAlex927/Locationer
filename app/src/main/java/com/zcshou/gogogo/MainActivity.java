@@ -1,22 +1,21 @@
 package com.zcshou.gogogo;
 
+import android.Manifest;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -35,8 +34,6 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.SimpleAdapter;
 import android.widget.TextView;
 
@@ -46,36 +43,10 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.SearchView;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.view.GravityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.preference.PreferenceManager;
 
-import com.baidu.location.BDAbstractLocationListener;
-import com.baidu.location.BDLocation;
-import com.baidu.location.LocationClient;
-import com.baidu.location.LocationClientOption;
-import com.baidu.mapapi.SDKInitializer;
-import com.baidu.mapapi.map.BaiduMap;
-import com.baidu.mapapi.map.BitmapDescriptor;
-import com.baidu.mapapi.map.BitmapDescriptorFactory;
-import com.baidu.mapapi.map.InfoWindow;
-import com.baidu.mapapi.map.MapPoi;
-import com.baidu.mapapi.map.MapStatus;
-import com.baidu.mapapi.map.MapStatusUpdate;
-import com.baidu.mapapi.map.MapStatusUpdateFactory;
-import com.baidu.mapapi.map.MapView;
-import com.baidu.mapapi.map.MarkerOptions;
-import com.baidu.mapapi.map.MyLocationConfiguration;
-import com.baidu.mapapi.map.MyLocationData;
-import com.baidu.mapapi.model.LatLng;
-import com.baidu.mapapi.search.core.SearchResult;
-import com.baidu.mapapi.search.geocode.GeoCodeResult;
-import com.baidu.mapapi.search.geocode.GeoCoder;
-import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener;
-import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption;
-import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult;
-import com.baidu.mapapi.search.sug.SuggestionResult;
-import com.baidu.mapapi.search.sug.SuggestionSearch;
-import com.baidu.mapapi.search.sug.SuggestionSearchOption;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.google.android.material.snackbar.Snackbar;
@@ -96,7 +67,7 @@ import com.zcshou.database.DataBaseHistoryLocation;
 import com.zcshou.database.DataBaseHistorySearch;
 import com.zcshou.utils.ShareUtils;
 import com.zcshou.utils.GoUtils;
-import com.zcshou.utils.MapUtils;
+import com.zcshou.utils.NominatimClient;
 
 import com.elvishew.xlog.XLog;
 
@@ -104,10 +75,17 @@ import io.noties.markwon.Markwon;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
-import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-public class MainActivity extends BaseActivity implements SensorEventListener {
+import org.maplibre.android.annotations.Marker;
+import org.maplibre.android.annotations.MarkerOptions;
+import org.maplibre.android.camera.CameraUpdateFactory;
+import org.maplibre.android.geometry.LatLng;
+import org.maplibre.android.maps.MapLibreMap;
+import org.maplibre.android.maps.MapView;
+
+public class MainActivity extends BaseActivity {
+    private static final String MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
     /* 对外 */
     public static final String LAT_MSG_ID = "LAT_VALUE";
     public static final String LNG_MSG_ID = "LNG_VALUE";
@@ -123,25 +101,16 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
 
     /*============================== 主界面地图 相关 ==============================*/
     /************** 地图 *****************/
-    public final static BitmapDescriptor mMapIndicator = BitmapDescriptorFactory.fromResource(R.drawable.icon_gcoding);
-    public static String mCurrentCity = null;
     private MapView mMapView;
-    private static BaiduMap mBaiduMap = null;
+    private static MapLibreMap mMap = null;
+    private static Marker mMapMarker;
     private static LatLng mMarkLatLngMap = new LatLng(36.547743718042415, 117.07018449827267); // 当前标记的地图点
     private static String mMarkName = null;
-    private GeoCoder mGeoCoder;
-    private SensorManager mSensorManager;
-    private Sensor mSensorAccelerometer;
-    private Sensor mSensorMagnetic;
-    private float[] mAccValues = new float[3];//加速度传感器数据
-    private float[] mMagValues = new float[3];//地磁传感器数据
-    private final float[] mR = new float[9];//旋转矩阵，用来保存磁场和加速度的数据
-    private final float[] mDirectionValues = new float[3];//模拟方向传感器的数据（原始数据为弧度）
     /************** 定位 *****************/
-    private LocationClient mLocClient = null;
-    private double mCurrentLat = 0.0;       // 当前位置的百度纬度
-    private double mCurrentLon = 0.0;       // 当前位置的百度经度
-    private float mCurrentDirection = 0.0f;
+    private LocationManager mLocationManager;
+    private LocationListener mLocationListener;
+    private double mCurrentLat = 0.0;
+    private double mCurrentLon = 0.0;
     private boolean isFirstLoc = true; // 是否首次定位
     private boolean isMockServStart = false;
     private ServiceGo.ServiceGoBinder mServiceBinder;
@@ -157,7 +126,6 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     private ListView mSearchHistoryList;
     private LinearLayout mHistoryLayout;
     private MenuItem searchItem;
-    private SuggestionSearch mSuggestionSearch;
     /*============================== 更新 相关 ==============================*/
     private DownloadManager mDownloadManager = null;
     private long mDownloadId;
@@ -185,7 +153,7 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
 
         initNavigationView();
 
-        initMap();
+        initMap(savedInstanceState);
 
         initMapLocation();
 
@@ -215,10 +183,15 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     }
 
     @Override
+    protected void onStart() {
+        super.onStart();
+        mMapView.onStart();
+    }
+
+    @Override
     protected void onPause() {
         XLog.i("MainActivity: onPause");
         mMapView.onPause();
-        mSensorManager.unregisterListener(this);
         super.onPause();
     }
 
@@ -226,16 +199,13 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     protected void onResume() {
         XLog.i("MainActivity: onResume");
         mMapView.onResume();
-        mSensorManager.registerListener(this, mSensorAccelerometer, SensorManager.SENSOR_DELAY_UI);
-        mSensorManager.registerListener(this, mSensorMagnetic, SensorManager.SENSOR_DELAY_UI);
         super.onResume();
     }
 
     @Override
     protected void onStop() {
         XLog.i("MainActivity: onStop");
-        //取消注册传感器监听
-        mSensorManager.unregisterListener(this);
+        mMapView.onStop();
         super.onStop();
     }
 
@@ -250,22 +220,28 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
         }
         unregisterReceiver(mDownloadBdRcv);
 
-        mSensorManager.unregisterListener(this);
-
-        // 退出时销毁定位
-        mLocClient.stop();
-        // 关闭定位图层
-        mBaiduMap.setMyLocationEnabled(false);
+        if (mLocationManager != null && mLocationListener != null) {
+            mLocationManager.removeUpdates(mLocationListener);
+        }
         mMapView.onDestroy();
-
-        //poi search destroy
-        mSuggestionSearch.destroy();
 
         //close db
         mLocationHistoryDB.close();
         mSearchHistoryDB.close();
 
         super.onDestroy();
+    }
+
+    @Override
+    public void onLowMemory() {
+        super.onLowMemory();
+        mMapView.onLowMemory();
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mMapView.onSaveInstanceState(outState);
     }
 
     @Override
@@ -321,15 +297,12 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
         searchView.setIconified(false);// 设置searchView处于展开状态
         searchView.onActionViewExpanded();// 当展开无输入内容的时候，没有关闭的图标
         searchView.setIconifiedByDefault(true);//默认为true在框内，设置false则在框外
-        searchView.setSubmitButtonEnabled(false);//显示提交按钮
+        searchView.setSubmitButtonEnabled(true);
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
                 try {
-                    mSuggestionSearch.requestSuggestion((new SuggestionSearchOption())
-                            .keyword(query)
-                            .city(mCurrentCity)
-                    );
+                    searchPlaces(query);
                     //搜索历史 插表参数
                     ContentValues contentValues = new ContentValues();
                     contentValues.put(DataBaseHistorySearch.DB_COLUMN_KEY, query);
@@ -338,7 +311,7 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                     contentValues.put(DataBaseHistorySearch.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
 
                     DataBaseHistorySearch.saveHistorySearch(mSearchHistoryDB, contentValues);
-                    mBaiduMap.clear();
+                    clearMapMarker();
                     mSearchLayout.setVisibility(View.INVISIBLE);
                 } catch (Exception e) {
                     GoUtils.DisplayToast(MainActivity.this, getResources().getString(R.string.app_error_search));
@@ -353,18 +326,6 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                 //当输入框内容改变的时候回调
                 //搜索历史置为不可见
                 mHistoryLayout.setVisibility(View.INVISIBLE);
-
-                if (newText != null && !newText.isEmpty()) {
-                    try {
-                        mSuggestionSearch.requestSuggestion((new SuggestionSearchOption())
-                                .keyword(newText)
-                                .city(mCurrentCity)
-                        );
-                    } catch (Exception e) {
-                        GoUtils.DisplayToast(MainActivity.this, getResources().getString(R.string.app_error_search));
-                        XLog.d(getResources().getString(R.string.app_error_search));
-                    }
-                }
 
                 return true;
             }
@@ -381,28 +342,6 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
         });
 
         return true;
-    }
-
-    @Override
-    public void onSensorChanged(SensorEvent sensorEvent) {
-        if(sensorEvent.sensor.getType() == Sensor.TYPE_ACCELEROMETER){
-            mAccValues = sensorEvent.values;
-        }
-        else if(sensorEvent.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
-            mMagValues = sensorEvent.values;
-        }
-
-        SensorManager.getRotationMatrix(mR, null, mAccValues, mMagValues);
-        SensorManager.getOrientation(mR, mDirectionValues);
-        mCurrentDirection = (float) Math.toDegrees(mDirectionValues[0]);    // 弧度转角度
-        if (mCurrentDirection < 0) {    // 由 -180 ~ + 180 转为 0 ~ 360
-            mCurrentDirection += 360;
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int i) {
-
     }
 
     /*============================== NavigationView 相关 ==============================*/
@@ -454,232 +393,89 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     }
 
     /*============================== 主界面地图 相关 ==============================*/
-    private void initMap() {
-        // 地图初始化
+    private void initMap(Bundle savedInstanceState) {
         mMapView = findViewById(R.id.bdMapView);
-        mMapView.showZoomControls(false);
-        mBaiduMap = mMapView.getMap();
-        mBaiduMap.setMapType(BaiduMap.MAP_TYPE_NORMAL);
-        mBaiduMap.setMyLocationEnabled(true);
-        mBaiduMap.setOnMapTouchListener(event -> {
-
-        });
-        mBaiduMap.setOnMapClickListener(new BaiduMap.OnMapClickListener() {
-            /**
-             * 单击地图
-             */
-            @Override
-            public void onMapClick(LatLng point) {
-                mMarkLatLngMap = point;
-                markMap();
-            }
-            /**
-             * 单击地图中的POI点
-             */
-            @Override
-            public void onMapPoiClick(MapPoi poi) {
-                mMarkLatLngMap = poi.getPosition();
-                markMap();
-            }
-        });
-        mBaiduMap.setOnMapLongClickListener(new BaiduMap.OnMapLongClickListener() {
-            /**
-             * 长按地图
-             */
-            @Override
-            public void onMapLongClick(LatLng point) {
-                mMarkLatLngMap = point;
-                markMap();
-                mGeoCoder.reverseGeoCode(new ReverseGeoCodeOption().location(point));
-            }
-        });
-        mBaiduMap.setOnMapDoubleClickListener(new BaiduMap.OnMapDoubleClickListener() {
-            /**
-             * 双击地图
-             */
-            @Override
-            public void onMapDoubleClick(LatLng point) {
-                mBaiduMap.animateMapStatus(MapStatusUpdateFactory.zoomIn());
-            }
-        });
-
-        View poiView = View.inflate(MainActivity.this, R.layout.location_poi_info, null);
-        TextView poiAddress = poiView.findViewById(R.id.poi_address);
-        TextView poiLongitude = poiView.findViewById(R.id.poi_longitude);
-        TextView poiLatitude = poiView.findViewById(R.id.poi_latitude);
-        ImageButton ibSave = poiView.findViewById(R.id.poi_save);
-        ibSave.setOnClickListener(v -> {
-            recordCurrentLocation(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
-            GoUtils.DisplayToast(this, getResources().getString(R.string.app_location_save));
-        });
-        ImageButton ibCopy = poiView.findViewById(R.id.poi_copy);
-        ibCopy.setOnClickListener(v -> {
-            //获取剪贴板管理器：
-            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            // 创建普通字符型ClipData
-            ClipData mClipData = ClipData.newPlainText("Label", mMarkLatLngMap.toString());
-            // 将 ClipData内容放到系统剪贴板里。
-            cm.setPrimaryClip(mClipData);
-
-            GoUtils.DisplayToast(this,  getResources().getString(R.string.app_location_copy));
-        });
-        ImageButton ibShare = poiView.findViewById(R.id.poi_share);
-        ibShare.setOnClickListener(v -> ShareUtils.shareText(MainActivity.this, "分享位置", poiLongitude.getText()+","+poiLatitude.getText()));
-        ImageButton ibFly = poiView.findViewById(R.id.poi_fly);
-        ibFly.setOnClickListener(this::doGoLocation);
-        mGeoCoder = GeoCoder.newInstance();
-        mGeoCoder.setOnGetGeoCodeResultListener(new OnGetGeoCoderResultListener() {
-            @Override
-            public void onGetGeoCodeResult(GeoCodeResult geoCodeResult) {
-                XLog.i(geoCodeResult.getLocation());
-            }
-
-            @Override
-            public void onGetReverseGeoCodeResult(ReverseGeoCodeResult reverseGeoCodeResult) {
-                if (reverseGeoCodeResult == null || reverseGeoCodeResult.error != SearchResult.ERRORNO.NO_ERROR) {
-                    XLog.i("逆地理位置失败!");
-                } else {
-                    mMarkName = String.valueOf(reverseGeoCodeResult.getAddress());
-                    poiLatitude.setText(String.valueOf(reverseGeoCodeResult.getLocation().latitude));
-                    poiLongitude.setText(String.valueOf(reverseGeoCodeResult.getLocation().longitude));
-                    poiAddress.setText(reverseGeoCodeResult.getAddress());
-                    final InfoWindow mInfoWindow = new InfoWindow(poiView, reverseGeoCodeResult.getLocation(), -100);
-                    mBaiduMap.showInfoWindow(mInfoWindow);
-                }
-            }
-        });
-
-        mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);// 获取传感器管理服务
-        if (mSensorManager != null) {
-            mSensorAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-            if (mSensorAccelerometer != null) {
-                mSensorManager.registerListener(this, mSensorAccelerometer, SensorManager.SENSOR_DELAY_UI);
-            }
-            mSensorMagnetic = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
-            if (mSensorMagnetic != null) {
-                mSensorManager.registerListener(this, mSensorMagnetic, SensorManager.SENSOR_DELAY_UI);
-            }
-        }
-    }
-
-    //开启地图的定位图层
-    private void initMapLocation() {
-        try {
-            // 定位初始化
-            mLocClient = new LocationClient(this);
-            mLocClient.registerLocationListener(new BDAbstractLocationListener() {
-                @Override
-                public void onReceiveLocation(BDLocation bdLocation) {
-                    if (bdLocation == null || mMapView == null) {// mapview 销毁后不在处理新接收的位置
-                        return;
-                    }
-
-                    mCurrentCity = bdLocation.getCity();
-                    mCurrentLat = bdLocation.getLatitude();
-                    mCurrentLon = bdLocation.getLongitude();
-                    MyLocationData locData = new MyLocationData.Builder()
-                            .accuracy(bdLocation.getRadius())
-                            .direction(mCurrentDirection)// 此处设置开发者获取到的方向信息，顺时针0-360
-                            .latitude(bdLocation.getLatitude())
-                            .longitude(bdLocation.getLongitude()).build();
-                    mBaiduMap.setMyLocationData(locData);
-                    MyLocationConfiguration configuration = new MyLocationConfiguration(MyLocationConfiguration.LocationMode.NORMAL, true, null);
-                    mBaiduMap.setMyLocationConfiguration(configuration);
-
-                    /* 如果出现错误，则需要重新请求位置 */
-                    int err = bdLocation.getLocType();
-                    if (err == BDLocation.TypeCriteriaException || err == BDLocation.TypeNetWorkException) {
-                        mLocClient.requestLocation();   /* 请求位置 */
-                    } else {
-                        if (isFirstLoc) {
-                            isFirstLoc = false;
-                            // 这里记录百度地图返回的位置
-                            mMarkLatLngMap = new LatLng(bdLocation.getLatitude(), bdLocation.getLongitude());
-                            MapStatus.Builder builder = new MapStatus.Builder();
-                            builder.target(mMarkLatLngMap).zoom(18.0f);
-                            mBaiduMap.animateMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()));
-
-                            XLog.i("First Baidu LatLng: " + mMarkLatLngMap);
-                        }
-                    }
-                }
-                /**
-                 * 错误的状态码
-                 * <a><a href="http://lbsyun.baidu.com/index.php?title=android-locsdk/guide/addition-func/error-code">...</a></a>
-                 * <p>
-                 * 回调定位诊断信息，开发者可以根据相关信息解决定位遇到的一些问题
-                 *
-                 * @param locType      当前定位类型
-                 * @param diagnosticType  诊断类型（1~9）
-                 * @param diagnosticMessage 具体的诊断信息释义
-                 */
-                @Override
-                public void onLocDiagnosticMessage(int locType, int diagnosticType, String diagnosticMessage) {
-                    XLog.i("Baidu ERROR: " + locType + "-" + diagnosticType + "-" + diagnosticMessage);
-                }
+        mMapView.onCreate(savedInstanceState);
+        mMapView.getMapAsync(map -> {
+            mMap = map;
+            map.setStyle(MAP_STYLE_URL, style -> {
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(mMarkLatLngMap, 12.0));
             });
-            LocationClientOption locationOption = getLocationClientOption();
-            //需将配置好的LocationClientOption对象，通过setLocOption方法传递给LocationClient对象使用
-            mLocClient.setLocOption(locationOption);
-            //开始定位
-            mLocClient.start();
-        } catch (Exception e) {
-            XLog.e("ERROR: initMapLocation");
-        }
+            map.addOnMapClickListener(point -> {
+                mMarkLatLngMap = point;
+                mMarkName = null;
+                markMap();
+                return true;
+            });
+            map.addOnMapLongClickListener(point -> {
+                mMarkLatLngMap = point;
+                mMarkName = null;
+                markMap();
+                return true;
+            });
+        });
+
     }
 
-    @NonNull
-    private static LocationClientOption getLocationClientOption() {
-        LocationClientOption locationOption = new LocationClientOption();
-        //可选，默认高精度，设置定位模式，高精度，低功耗，仅设备
-        locationOption.setLocationMode(LocationClientOption.LocationMode.Hight_Accuracy);
-        //可选，默认gcj02，设置返回的定位结果坐标系，如果配合百度地图使用，建议设置为bd09ll;
-        locationOption.setCoorType("bd09ll");
-        //可选，默认0，即仅定位一次，设置发起连续定位请求的间隔需要大于等于1000ms才是有效的
-        locationOption.setScanSpan(1000);
-        //可选，设置是否需要地址信息，默认不需要
-        locationOption.setIsNeedAddress(true);
-        //可选，设置是否需要设备方向结果
-        locationOption.setNeedDeviceDirect(false);
-        //可选，默认false，设置是否当gps有效时按照1S1次频率输出GPS结果
-        locationOption.setLocationNotify(true);
-        //可选，默认true，定位SDK内部是一个SERVICE，并放到了独立进程，设置是否在stop的时候杀死这个进程，默认不杀死
-        locationOption.setIgnoreKillProcess(true);
-        //可选，默认false，设置是否需要位置语义化结果，可以在BDLocation.getLocationDescribe里得到，结果类似于“在北京天安门附近”
-        locationOption.setIsNeedLocationDescribe(false);
-        //可选，默认false，设置是否需要POI结果，可以在BDLocation.getPoiList里得到
-        locationOption.setIsNeedLocationPoiList(false);
-        //可选，默认false，设置是否收集CRASH信息，默认收集
-        locationOption.setIgnoreCacheException(true);
-        //可选，默认false，设置是否开启Gps定位
-        //locationOption.setOpenGps(true);
-        locationOption.setOpenGnss(true);
-        //可选，默认false，设置定位时是否需要海拔信息，默认不需要，除基础定位版本都可用
-        locationOption.setIsNeedAltitude(false);
-        return locationOption;
+    private void initMapLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            XLog.e("Location permission is not granted");
+            return;
+        }
+        mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        mLocationListener = new LocationListener() {
+            @Override
+            public void onLocationChanged(@NonNull Location location) {
+                mCurrentLat = location.getLatitude();
+                mCurrentLon = location.getLongitude();
+                if (isFirstLoc) {
+                    isFirstLoc = false;
+                    XLog.i("System location is available");
+                }
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+            }
+
+            @Override
+            public void onProviderEnabled(@NonNull String provider) {
+            }
+
+            @Override
+            public void onProviderDisabled(@NonNull String provider) {
+            }
+        };
+        try {
+            mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1_000L, 0.5f, mLocationListener);
+            mLocationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5_000L, 5.0f, mLocationListener);
+            Location lastLocation = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (lastLocation == null) {
+                lastLocation = mLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            }
+            if (lastLocation != null) {
+                mLocationListener.onLocationChanged(lastLocation);
+            }
+        } catch (IllegalArgumentException | SecurityException e) {
+            XLog.e("System location initialization failed: " + e.getMessage());
+        }
     }
 
     //地图上各按键的监听
     private void initMapButton() {
-        RadioGroup mGroupMapType = this.findViewById(R.id.RadioGroupMapType);
-        mGroupMapType.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.mapNormal) {
-                mBaiduMap.setMapType(BaiduMap.MAP_TYPE_NORMAL);
-            }
-
-            if (checkedId == R.id.mapSatellite) {
-                mBaiduMap.setMapType(BaiduMap.MAP_TYPE_SATELLITE);
-            }
-        });
-
         ImageButton curPosBtn = this.findViewById(R.id.cur_position);
         curPosBtn.setOnClickListener(v -> resetMap());
 
         ImageButton zoomInBtn = this.findViewById(R.id.zoom_in);
-        zoomInBtn.setOnClickListener(v -> mBaiduMap.animateMapStatus(MapStatusUpdateFactory.zoomIn()));
+        zoomInBtn.setOnClickListener(v -> {
+            if (mMap != null) mMap.animateCamera(CameraUpdateFactory.zoomIn());
+        });
 
         ImageButton zoomOutBtn = this.findViewById(R.id.zoom_out);
-        zoomOutBtn.setOnClickListener(v -> mBaiduMap.animateMapStatus(MapStatusUpdateFactory.zoomOut()));
+        zoomOutBtn.setOnClickListener(v -> {
+            if (mMap != null) mMap.animateCamera(CameraUpdateFactory.zoomOut());
+        });
 
         ImageButton inputPosBtn = this.findViewById(R.id.input_pos);
         inputPosBtn.setOnClickListener(v -> {
@@ -692,8 +488,6 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
 
             EditText dialog_lng = view.findViewById(R.id.joystick_longitude);
             EditText dialog_lat = view.findViewById(R.id.joystick_latitude);
-            RadioButton rbBD = view.findViewById(R.id.pos_type_bd);
-
             Button btnGo = view.findViewById(R.id.input_position_ok);
             btnGo.setOnClickListener(v2 -> {
                 String dialog_lng_str = dialog_lng.getText().toString();
@@ -711,18 +505,13 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                         if (dialog_lat_double > 90.0 || dialog_lat_double < -90.0) {
                             GoUtils.DisplayToast(MainActivity.this,  getResources().getString(R.string.app_error_latitude));
                         } else {
-                            if (rbBD.isChecked()) {
-                                mMarkLatLngMap = new LatLng(dialog_lat_double, dialog_lng_double);
-                            } else {
-                                double[] bdLonLat = MapUtils.wgs2bd09(dialog_lat_double, dialog_lng_double);
-                                mMarkLatLngMap = new LatLng(bdLonLat[1], bdLonLat[0]);
-                            }
+                            mMarkLatLngMap = new LatLng(dialog_lat_double, dialog_lng_double);
                             mMarkName = "手动输入的坐标";
 
                             markMap();
-
-                            MapStatusUpdate mapstatusupdate = MapStatusUpdateFactory.newLatLng(mMarkLatLngMap);
-                            mBaiduMap.setMapStatus(mapstatusupdate);
+                            if (mMap != null) {
+                                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(mMarkLatLngMap, 18.0));
+                            }
 
                             dialog.dismiss();
                         }
@@ -737,42 +526,44 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
 
     //标定选择的位置
     private void markMap() {
-        if (mMarkLatLngMap != null) {
-            MarkerOptions ooA = new MarkerOptions().position(mMarkLatLngMap).icon(mMapIndicator);
-            mBaiduMap.clear();
-            mBaiduMap.addOverlay(ooA);
+        if (mMap != null && mMarkLatLngMap != null) {
+            clearMapMarker();
+            MarkerOptions markerOptions = new MarkerOptions()
+                    .position(mMarkLatLngMap)
+                    .title(mMarkName == null ? "已选位置" : mMarkName)
+                    .snippet(mMarkLatLngMap.getLongitude() + ", " + mMarkLatLngMap.getLatitude());
+            mMapMarker = mMap.addMarker(markerOptions);
+        }
+    }
+
+    private static void clearMapMarker() {
+        if (mMap != null && mMapMarker != null) {
+            mMap.removeMarker(mMapMarker);
+            mMapMarker = null;
         }
     }
 
     private void resetMap() {
-        mBaiduMap.clear();
+        clearMapMarker();
         mMarkLatLngMap = null;
-
-        MyLocationData locData = new MyLocationData.Builder()
-                .latitude(mCurrentLat)
-                .longitude(mCurrentLon)
-                .direction(mCurrentDirection)
-                .build();
-        mBaiduMap.setMyLocationData(locData);
-
-        MapStatus.Builder builder = new MapStatus.Builder();
-        builder.target(new LatLng(mCurrentLat, mCurrentLon)).zoom(18.0f);
-        mBaiduMap.animateMapStatus(MapStatusUpdateFactory.newMapStatus(builder.build()));
+        if (mMap != null && (mCurrentLat != 0.0 || mCurrentLon != 0.0)) {
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(mCurrentLat, mCurrentLon), 18.0));
+        }
     }
 
     // 在地图上显示位置
-    public static boolean showLocation(String name, String bd09Longitude, String bd09Latitude) {
+    public static boolean showLocation(String name, String longitude, String latitude) {
         boolean ret = true;
 
         try {
-            if (!bd09Longitude.isEmpty() && !bd09Latitude.isEmpty()) {
+            if (!longitude.isEmpty() && !latitude.isEmpty()) {
                 mMarkName = name;
-                mMarkLatLngMap = new LatLng(Double.parseDouble(bd09Latitude), Double.parseDouble(bd09Longitude));
-                MarkerOptions ooA = new MarkerOptions().position(mMarkLatLngMap).icon(mMapIndicator);
-                mBaiduMap.clear();
-                mBaiduMap.addOverlay(ooA);
-                MapStatusUpdate mapstatusupdate = MapStatusUpdateFactory.newLatLng(mMarkLatLngMap);
-                mBaiduMap.setMapStatus(mapstatusupdate);
+                mMarkLatLngMap = new LatLng(Double.parseDouble(latitude), Double.parseDouble(longitude));
+                clearMapMarker();
+                if (mMap != null) {
+                    mMapMarker = mMap.addMarker(new MarkerOptions().position(mMarkLatLngMap).title(name));
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(mMarkLatLngMap, 18.0));
+                }
             }
         } catch (Exception e) {
             ret = false;
@@ -790,9 +581,8 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     private void startGoLocation() {
         Intent serviceGoIntent = new Intent(MainActivity.this, ServiceGo.class);
         bindService(serviceGoIntent, mConnection, BIND_AUTO_CREATE);    // 绑定服务和活动，之后活动就可以去调服务的方法了
-        double[] latLng = MapUtils.bd2wgs(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
-        serviceGoIntent.putExtra(LNG_MSG_ID, latLng[0]);
-        serviceGoIntent.putExtra(LAT_MSG_ID, latLng[1]);
+        serviceGoIntent.putExtra(LNG_MSG_ID, mMarkLatLngMap.getLongitude());
+        serviceGoIntent.putExtra(LAT_MSG_ID, mMarkLatLngMap.getLatitude());
         double alt = Double.parseDouble(sharedPreferences.getString("setting_altitude", "55.0"));
         serviceGoIntent.putExtra(ALT_MSG_ID, alt);
 
@@ -810,11 +600,6 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
     }
 
     private void doGoLocation(View v) {
-        if (!GoUtils.isNetworkAvailable(this)) {
-            GoUtils.DisplayToast(this, getResources().getString(R.string.app_error_network));
-            return;
-        }
-
         if (!GoUtils.isGpsOpened(this)) {
             GoUtils.showEnableGpsDialog(this);
             return;
@@ -833,15 +618,14 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                         .setAction("Action", null).show();
                 mButtonStart.setImageResource(R.drawable.ic_position);
             } else {
-                double[] latLng = MapUtils.bd2wgs(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
                 double alt = Double.parseDouble(sharedPreferences.getString("setting_altitude", "55.0"));
-                mServiceBinder.setPosition(latLng[0], latLng[1], alt);
+                mServiceBinder.setPosition(mMarkLatLngMap.getLongitude(), mMarkLatLngMap.getLatitude(), alt);
                 Snackbar.make(v, "已传送到新位置", Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
 
-                recordCurrentLocation(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
+                recordCurrentLocation(mMarkLatLngMap.getLongitude(), mMarkLatLngMap.getLatitude());
 
-                mBaiduMap.clear();
+                clearMapMarker();
                 mMarkLatLngMap = null;
 
                 if (GoUtils.isWifiEnabled(MainActivity.this)) {
@@ -862,8 +646,8 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                     Snackbar.make(v, "模拟位置已启动", Snackbar.LENGTH_LONG)
                             .setAction("Action", null).show();
 
-                    recordCurrentLocation(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
-                    mBaiduMap.clear();
+                    recordCurrentLocation(mMarkLatLngMap.getLongitude(), mMarkLatLngMap.getLatitude());
+                    clearMapMarker();
                     mMarkLatLngMap = null;
 
                     if (GoUtils.isWifiEnabled(MainActivity.this)) {
@@ -903,8 +687,10 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                 searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_DESCRIPTION, cursor.getString(2));
                 searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_TIMESTAMP, "" + cursor.getInt(3));
                 searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_IS_LOCATION, "" + cursor.getInt(4));
-                searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_CUSTOM, cursor.getString(7));
-                searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_CUSTOM, cursor.getString(8));
+                searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_CUSTOM,
+                        cursor.getString(cursor.getColumnIndexOrThrow(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_WGS84)));
+                searchHistoryItem.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_CUSTOM,
+                        cursor.getString(cursor.getColumnIndexOrThrow(DataBaseHistorySearch.DB_COLUMN_LATITUDE_WGS84)));
                 data.add(searchHistoryItem);
             }
             cursor.close();
@@ -917,76 +703,22 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
 
     // 记录请求的位置信息
     private void recordCurrentLocation(double lng, double lat) {
-        //参数坐标系：bd09
-        final String safeCode = BuildConfig.MAPS_SAFE_CODE;
-        final String ak = sharedPreferences.getString("setting_map_key", BuildConfig.MAPS_API_KEY);
-        double[] latLng = MapUtils.bd2wgs(lng, lat);
-        //bd09坐标的位置信息
-        String mapApiUrl = "https://api.map.baidu.com/reverse_geocoding/v3/?ak=" + ak + "&output=json&coordtype=bd09ll" + "&location=" + lat + "," + lng + "&mcode=" + safeCode;
+        final String fallbackName = mMarkName == null
+                ? getResources().getString(R.string.history_location_default_name)
+                : mMarkName;
+        saveLocationHistory(fallbackName, lng, lat);
+    }
 
-        okhttp3.Request request = new okhttp3.Request.Builder().url(mapApiUrl).get().build();
-        final Call call = mOkHttpClient.newCall(request);
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                //http 请求失败
-                XLog.e("HTTP: HTTP GET FAILED");
-                //插表参数
-                ContentValues contentValues = new ContentValues();
-                contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, mMarkName);
-                contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_WGS84, String.valueOf(latLng[0]));
-                contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_WGS84, String.valueOf(latLng[1]));
-                contentValues.put(DataBaseHistoryLocation.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
-                contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_CUSTOM, Double.toString(lng));
-                contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_CUSTOM, Double.toString(lat));
-
-                DataBaseHistoryLocation.saveHistoryLocation(mLocationHistoryDB, contentValues);
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                ResponseBody responseBody = response.body();
-                if (responseBody != null) {
-                    String resp = responseBody.string();
-                    try {
-                        JSONObject getRetJson = new JSONObject(resp);
-
-                        if (Integer.parseInt(getRetJson.getString("status")) == 0) { // 位置获取成功
-                            JSONObject posInfoJson = getRetJson.getJSONObject("result");
-                            String formatted_address = posInfoJson.getString("formatted_address");
-                            ContentValues contentValues = new ContentValues();
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, formatted_address);
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_WGS84, String.valueOf(latLng[0]));
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_WGS84, String.valueOf(latLng[1]));
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_CUSTOM, Double.toString(lng));
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_CUSTOM, Double.toString(lat));
-                            DataBaseHistoryLocation.saveHistoryLocation(mLocationHistoryDB, contentValues);
-                        } else {
-                            ContentValues contentValues = new ContentValues();
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, mMarkName == null ? getRetJson.getString("message"): mMarkName);
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_WGS84, String.valueOf(latLng[0]));
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_WGS84, String.valueOf(latLng[1]));
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_CUSTOM, Double.toString(lng));
-                            contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_CUSTOM, Double.toString(lat));
-                            DataBaseHistoryLocation.saveHistoryLocation(mLocationHistoryDB, contentValues);
-                        }
-                    } catch (JSONException e) {
-                        XLog.e("JSON: resolve json error");
-                        ContentValues contentValues = new ContentValues();
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, mMarkName == null ? getResources().getString(R.string.history_location_default_name) : mMarkName);
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, mMarkName);
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_WGS84, String.valueOf(latLng[0]));
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_WGS84, String.valueOf(latLng[1]));
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_CUSTOM, Double.toString(lng));
-                        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_CUSTOM, Double.toString(lat));
-                        DataBaseHistoryLocation.saveHistoryLocation(mLocationHistoryDB, contentValues);
-                    }
-                }
-            }
-        });
+    private void saveLocationHistory(String locationName, double lng, double lat) {
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LOCATION, locationName);
+        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_WGS84, Double.toString(lng));
+        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_WGS84, Double.toString(lat));
+        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
+        // 保留旧列以兼容现有数据库；迁移后其中同样保存 WGS84。
+        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LONGITUDE_CUSTOM, Double.toString(lng));
+        contentValues.put(DataBaseHistoryLocation.DB_COLUMN_LATITUDE_CUSTOM, Double.toString(lat));
+        DataBaseHistoryLocation.saveHistoryLocation(mLocationHistoryDB, contentValues);
     }
 
     /*============================== SearchView 相关 ==============================*/
@@ -1000,12 +732,11 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
             String lat = ((TextView) view.findViewById(R.id.poi_latitude)).getText().toString();
             mMarkName = ((TextView) view.findViewById(R.id.poi_name)).getText().toString();
             mMarkLatLngMap = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
-            MapStatusUpdate mapstatusupdate = MapStatusUpdateFactory.newLatLng(mMarkLatLngMap);
-            mBaiduMap.setMapStatus(mapstatusupdate);
+            if (mMap != null) {
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(mMarkLatLngMap, 18.0));
+            }
 
             markMap();
-
-            double[] latLng = MapUtils.bd2wgs(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
 
             // mSearchList.setVisibility(View.GONE);
             //搜索历史 插表参数
@@ -1015,8 +746,8 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
             contentValues.put(DataBaseHistorySearch.DB_COLUMN_IS_LOCATION, DataBaseHistorySearch.DB_SEARCH_TYPE_RESULT);
             contentValues.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_CUSTOM, lng);
             contentValues.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_CUSTOM, lat);
-            contentValues.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_WGS84, String.valueOf(latLng[0]));
-            contentValues.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_WGS84, String.valueOf(latLng[1]));
+            contentValues.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_WGS84, lng);
+            contentValues.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_WGS84, lat);
             contentValues.put(DataBaseHistorySearch.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
 
             DataBaseHistorySearch.saveHistorySearch(mSearchHistoryDB, contentValues);
@@ -1036,12 +767,11 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                 String lat = ((TextView) view.findViewById(R.id.search_latitude)).getText().toString();
                 // mMarkName = ((TextView) view.findViewById(R.id.poi_name)).getText().toString();
                 mMarkLatLngMap = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
-                MapStatusUpdate mapstatusupdate = MapStatusUpdateFactory.newLatLng(mMarkLatLngMap);
-                mBaiduMap.setMapStatus(mapstatusupdate);
+                if (mMap != null) {
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(mMarkLatLngMap, 18.0));
+                }
 
                 markMap();
-
-                double[] latLng = MapUtils.bd2wgs(mMarkLatLngMap.longitude, mMarkLatLngMap.latitude);
 
                 //设置列表不可见
                 mHistoryLayout.setVisibility(View.INVISIBLE);
@@ -1053,8 +783,8 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                 contentValues.put(DataBaseHistorySearch.DB_COLUMN_IS_LOCATION, DataBaseHistorySearch.DB_SEARCH_TYPE_RESULT);
                 contentValues.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_CUSTOM, lng);
                 contentValues.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_CUSTOM, lat);
-                contentValues.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_WGS84, String.valueOf(latLng[0]));
-                contentValues.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_WGS84, String.valueOf(latLng[1]));
+                contentValues.put(DataBaseHistorySearch.DB_COLUMN_LONGITUDE_WGS84, lng);
+                contentValues.put(DataBaseHistorySearch.DB_COLUMN_LATITUDE_WGS84, lat);
                 contentValues.put(DataBaseHistorySearch.DB_COLUMN_TIMESTAMP, System.currentTimeMillis() / 1000);
 
                 DataBaseHistorySearch.saveHistorySearch(mSearchHistoryDB, contentValues);
@@ -1108,42 +838,45 @@ public class MainActivity extends BaseActivity implements SensorEventListener {
                     .show();
             return true;
         });
-        //设置搜索建议返回值监听
-        mSuggestionSearch = SuggestionSearch.newInstance();
-        mSuggestionSearch.setOnGetSuggestionResultListener(suggestionResult -> {
-            if (suggestionResult == null || suggestionResult.getAllSuggestions() == null) {
-                GoUtils.DisplayToast(this,getResources().getString(R.string.app_search_null));
-            } else {
-                List<Map<String, Object>> data = getMapList(suggestionResult);
+    }
 
-                SimpleAdapter simAdapt = new SimpleAdapter(
-                        MainActivity.this,
-                        data,
-                        R.layout.search_poi_item,
-                        new String[] {POI_NAME, POI_ADDRESS, POI_LONGITUDE, POI_LATITUDE}, // 与下面数组元素要一一对应
-                        new int[] {R.id.poi_name, R.id.poi_address, R.id.poi_longitude, R.id.poi_latitude});
-                mSearchList.setAdapter(simAdapt);
-                // mSearchList.setVisibility(View.VISIBLE);
-                mSearchLayout.setVisibility(View.VISIBLE);
+    private void searchPlaces(String query) {
+        NominatimClient.getInstance().search(query, new NominatimClient.Callback<List<NominatimClient.Place>>() {
+            @Override
+            public void onSuccess(List<NominatimClient.Place> places) {
+                runOnUiThread(() -> {
+                    if (places.isEmpty()) {
+                        mSearchLayout.setVisibility(View.INVISIBLE);
+                        GoUtils.DisplayToast(MainActivity.this, getResources().getString(R.string.app_search_null));
+                        return;
+                    }
+                    SimpleAdapter adapter = new SimpleAdapter(
+                            MainActivity.this,
+                            getMapList(places),
+                            R.layout.search_poi_item,
+                            new String[] {POI_NAME, POI_ADDRESS, POI_LONGITUDE, POI_LATITUDE},
+                            new int[] {R.id.poi_name, R.id.poi_address, R.id.poi_longitude, R.id.poi_latitude});
+                    mSearchList.setAdapter(adapter);
+                    mSearchLayout.setVisibility(View.VISIBLE);
+                });
+            }
+
+            @Override
+            public void onFailure(Exception error) {
+                XLog.e("Nominatim search failed: " + error.getMessage());
+                runOnUiThread(() -> GoUtils.DisplayToast(MainActivity.this, getResources().getString(R.string.app_error_search)));
             }
         });
     }
 
-    @NonNull
-    private static List<Map<String, Object>> getMapList(SuggestionResult suggestionResult) {
+    private static List<Map<String, Object>> getMapList(List<NominatimClient.Place> places) {
         List<Map<String, Object>> data = new ArrayList<>();
-        int retCnt = suggestionResult.getAllSuggestions().size();
-
-        for (int i = 0; i < retCnt; i++) {
-            if (suggestionResult.getAllSuggestions().get(i).pt == null) {
-                continue;
-            }
-
+        for (NominatimClient.Place place : places) {
             Map<String, Object> poiItem = new HashMap<>();
-            poiItem.put(POI_NAME, suggestionResult.getAllSuggestions().get(i).key);
-            poiItem.put(POI_ADDRESS, suggestionResult.getAllSuggestions().get(i).city + " " + suggestionResult.getAllSuggestions().get(i).district);
-            poiItem.put(POI_LONGITUDE, "" + suggestionResult.getAllSuggestions().get(i).pt.longitude);
-            poiItem.put(POI_LATITUDE, "" + suggestionResult.getAllSuggestions().get(i).pt.latitude);
+            poiItem.put(POI_NAME, place.name);
+            poiItem.put(POI_ADDRESS, place.displayName);
+            poiItem.put(POI_LONGITUDE, Double.toString(place.longitude));
+            poiItem.put(POI_LATITUDE, Double.toString(place.latitude));
             data.add(poiItem);
         }
         return data;

@@ -48,6 +48,7 @@
             android:layout_height="wrap_content"
             android:background="#ddffffff"
             android:visibility="gone"
+            android:orientation="vertical"
             android:layout_marginTop="?attr/actionBarSize">
             <ListView
                 android:id="@+id/search_list_view"
@@ -55,6 +56,13 @@
                 android:layout_margin="10dp"
                 android:layout_height="wrap_content">
             </ListView>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="4dp"
+                android:text="@string/osm_search_attribution"
+                android:textSize="11sp" />
         </LinearLayout>
 
         <LinearLayout
