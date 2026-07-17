@@ -6,62 +6,73 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/surfaceElevated"
+        app:elevation="2dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/surfaceElevated"
+            app:contentInsetStartWithNavigation="8dp"
+            app:navigationIconTint="@color/textPrimary"
+            app:popupTheme="@style/AppTheme.PopupOverlay"
+            app:title="@string/app_name"
+            app:titleTextAppearance="@style/TextAppearance.Locationer.Toolbar" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-
-        <com.google.android.material.appbar.AppBarLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:theme="@style/AppTheme.AppBarOverlay">
-
-            <androidx.appcompat.widget.Toolbar
-                android:id="@+id/toolbar"
-                android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
-                android:background="@color/colorPrimary"
-                app:popupTheme="@style/AppTheme.PopupOverlay" />
-
-        </com.google.android.material.appbar.AppBarLayout>
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
         <include
             layout="@layout/main_map"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="?attr/actionBarSize" />
+            android:layout_height="match_parent" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/faBtnStart"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_marginStart="30dp"
-            android:layout_marginBottom="80dp"
-            android:contentDescription="@null"
-            app:elevation="6dp"
-            app:pressedTranslationZ="12dp"
-            app:srcCompat="@drawable/ic_position" />
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="24dp"
+            android:layout_marginBottom="24dp"
+            android:contentDescription="@string/start_location"
+            app:backgroundTint="@color/colorAccent"
+            app:elevation="8dp"
+            app:srcCompat="@drawable/ic_position"
+            app:tint="@color/white" />
 
         <LinearLayout
             android:id="@+id/search_linear"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#ddffffff"
-            android:visibility="gone"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_search_panel"
+            android:elevation="10dp"
             android:orientation="vertical"
-            android:layout_marginTop="?attr/actionBarSize">
+            android:visibility="gone">
             <ListView
                 android:id="@+id/search_list_view"
                 android:layout_width="match_parent"
-                android:layout_margin="10dp"
-                android:layout_height="wrap_content">
-            </ListView>
+                android:layout_height="wrap_content"
+                android:divider="@color/dividerSubtle"
+                android:dividerHeight="1dp" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:padding="4dp"
+                android:padding="8dp"
                 android:text="@string/osm_search_attribution"
+                android:textColor="@color/textSecondary"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -69,15 +80,19 @@
             android:id="@+id/search_history_linear"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#ddffffff"
-            android:visibility="gone"
-            android:layout_marginTop="?attr/actionBarSize">
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_search_panel"
+            android:elevation="10dp"
+            android:orientation="vertical"
+            android:visibility="gone">
             <ListView
                 android:id="@+id/search_history_list_view"
                 android:layout_width="match_parent"
-                android:layout_margin="10dp"
-                android:layout_height="wrap_content">
-            </ListView>
+                android:layout_height="wrap_content"
+                android:divider="@color/dividerSubtle"
+                android:dividerHeight="1dp" />
         </LinearLayout>
 
     </FrameLayout>

@@ -6,7 +6,7 @@ android {
     ndkVersion = '26.2.11394342'
     compileSdk = 36
     buildToolsVersion = '36.0.0'
-    namespace = 'com.zcshou.gogogo'
+    namespace = 'com.locationer.app'
 
     signingConfigs {
         debug {
@@ -24,7 +24,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.zcshou.gogogo"
+        applicationId "com.locationer.app"
         minSdkVersion 27
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 32
@@ -93,9 +93,9 @@ android {
             if (outputFile != null && outputFile.name.endsWith('.apk')) {
                 def fileName
                 if (variant.buildType.name == 'release') {
-                    fileName = "Go_${defaultConfig.versionName}_arm64-v8a_release.apk"
+                    fileName = "Locationer_${defaultConfig.versionName}_arm64-v8a_release.apk"
                 } else {
-                    fileName = "Go_${defaultConfig.versionName}_arm64-v8a_debug.apk"
+                    fileName = "Locationer_${defaultConfig.versionName}_arm64-v8a_debug.apk"
                 }
                 outputFileName=fileName
             }

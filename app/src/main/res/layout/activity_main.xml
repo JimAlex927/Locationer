@@ -15,9 +15,15 @@
 
     <com.google.android.material.navigation.NavigationView
         android:id="@+id/nav_view"
-        android:layout_width="wrap_content"
+        android:layout_width="304dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
+        android:background="@color/surfaceElevated"
+        app:itemBackground="?attr/selectableItemBackground"
+        app:itemHorizontalPadding="24dp"
+        app:itemIconPadding="20dp"
+        app:itemIconTint="@color/nav_item_tint"
+        app:itemTextColor="@color/textPrimary"
         app:headerLayout="@layout/nav_header"
         app:menu="@menu/menu_nav" />
 

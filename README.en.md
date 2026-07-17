@@ -17,7 +17,7 @@
 </div>
 
 <div align="center">
-GoGoGo - A mock location app without root on android 8.0+.
+Locationer - A mock location app without root on Android 8.0+.
 </div>
 
 ##

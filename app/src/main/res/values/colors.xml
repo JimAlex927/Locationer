@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#ff008577</color>
-    <color name="colorPrimaryDark">#ff008577</color>
-    <color name="colorAccent">#ff00897B</color>
+    <color name="colorPrimary">#20594E</color>
+    <color name="colorPrimaryDark">#153F38</color>
+    <color name="colorAccent">#C5523E</color>
+    <color name="surface">#F7F9F8</color>
+    <color name="surfaceElevated">#FFFFFF</color>
+    <color name="textPrimary">#1D2724</color>
+    <color name="textSecondary">#65716D</color>
+    <color name="dividerSubtle">#DCE3E0</color>
+    <color name="mapControlIcon">#24312D</color>
+    <color name="mapPanelStroke">#CDD7D3</color>
 
     <color name="white">#ffffff</color> <!-- 白色 -->
     <color name="ivory">#fffff0</color> <!-- 象牙色 -->
